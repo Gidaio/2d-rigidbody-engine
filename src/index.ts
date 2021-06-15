@@ -1,21 +1,32 @@
+import Polygon from "./polygon.js"
 import Vector2 from "./vector2.js"
-
-type Polygon = {
-    vertices: Vector2[],
-    position: Vector2,
-}
 
 const canvas = document.getElementById("canvas") as HTMLCanvasElement
 const context = canvas.getContext("2d")!
+let lastTime = performance.now()
 
 const polygons: Polygon[] = [
-    regularPolygon(new Vector2(0, 0), 6, 1),
-    regularPolygon(new Vector2(1, 1), 3, 0.5),
-    regularPolygon(new Vector2(2, -1), 9, 3),
-    regularPolygon(new Vector2(-4, 0), 5, 1.25),
+    Polygon.regular(new Vector2(0, 0), 6, 1),
+    Polygon.regular(new Vector2(1, 1), 3, 0.5),
+    Polygon.regular(new Vector2(2, -1), 9, 3),
+    Polygon.regular(new Vector2(-4, 0), 5, 1.25),
 ]
 
-render()
+polygons[0].setDirectionAndSpeed(Math.PI / 4, 1)
+polygons[1].setDirectionAndSpeed(2 * Math.PI / 3, 1.5)
+polygons[2].setDirectionAndSpeed(3 * Math.PI / 2, 0.25)
+
+requestAnimationFrame(doFrame)
+
+function doFrame(now: DOMHighResTimeStamp) {
+    const deltaTime = (now - lastTime) / 1000
+    lastTime = now
+
+    polygons.forEach(polygon => polygon.update(deltaTime))
+    render()
+
+    requestAnimationFrame(doFrame)
+}
 
 function render() {
     context.fillStyle = "#FFFFFF"
@@ -44,15 +55,4 @@ function drawPolygon(polygon: Polygon) {
 
     context.closePath()
     context.stroke()
-}
-
-function regularPolygon(position: Vector2, sides: number, radius: number): Polygon {
-    const vertices = Array(sides).fill(0)
-        .map((_, index) => 2 * Math.PI * index / sides)
-        .map(angle => new Vector2(Math.cos(angle), Math.sin(angle)).multiply(radius))
-
-    return {
-        vertices,
-        position,
-    }
 }

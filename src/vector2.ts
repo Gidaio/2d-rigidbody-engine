@@ -3,6 +3,10 @@ export default class Vector2 {
         return [this.x, this.y]
     }
 
+    public static zero(): Vector2 {
+        return new Vector2(0, 0)
+    }
+
     public constructor(public x: number, public y: number) {}
 
     public addScalar(scalar: number): Vector2 {
