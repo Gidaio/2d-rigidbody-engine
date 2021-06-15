@@ -34,4 +34,17 @@ export default class Polygon {
             this.position.y += 10
         }
     }
+
+    public support(vector: Vector2): Vector2 {
+        let [_, closestVertex] = this.vertices.reduce<[number, Vector2]>((best, vertex) => {
+            const current = vector.dot(vertex)
+            if (current > best[0]) {
+                return [current, vertex]
+            } else {
+                return best
+            }
+        }, [-Infinity, Vector2.zero()])
+
+        return closestVertex
+    }
 }

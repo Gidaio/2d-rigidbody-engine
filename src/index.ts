@@ -4,6 +4,36 @@ import Vector2 from "./vector2.js"
 const canvas = document.getElementById("canvas") as HTMLCanvasElement
 const context = canvas.getContext("2d")!
 let lastTime = performance.now()
+let supportAngle = 0
+
+const keys = {
+    left: false,
+    right: false,
+}
+
+document.addEventListener("keydown", event => {
+    switch (event.key) {
+        case "ArrowLeft":
+            keys.left = true
+            break
+
+        case "ArrowRight":
+            keys.right = true
+            break
+    }
+})
+
+document.addEventListener("keyup", event => {
+    switch (event.key) {
+        case "ArrowLeft":
+            keys.left = false
+            break
+
+        case "ArrowRight":
+            keys.right = false
+            break
+    }
+})
 
 const polygons: Polygon[] = [
     Polygon.regular(new Vector2(0, 0), 6, 1),
@@ -23,27 +53,37 @@ function doFrame(now: DOMHighResTimeStamp) {
     lastTime = now
 
     polygons.forEach(polygon => polygon.update(deltaTime))
+    if (keys.left) {
+        supportAngle += deltaTime * 2
+    }
+
+    if (keys.right) {
+        supportAngle -= deltaTime * 2
+    }
+
     render()
 
     requestAnimationFrame(doFrame)
 }
 
 function render() {
+    const supportVector = new Vector2(Math.cos(supportAngle), Math.sin(supportAngle))
+
     context.fillStyle = "#FFFFFF"
     context.fillRect(0, 0, canvas.width, canvas.height)
-    polygons.forEach(drawPolygon)
+    polygons.forEach(polygon => drawPolygon(polygon, supportVector))
+
+    const renderSupportVector = supportVector.multiply(50)
+
+    context.strokeStyle = "#FF0000"
+    context.beginPath()
+    context.moveTo(canvas.width / 2, canvas.height / 2)
+    context.lineTo(canvas.width / 2 + renderSupportVector.x, canvas.height / 2 - renderSupportVector.y)
+    context.stroke()
 }
 
-function drawPolygon(polygon: Polygon) {
-    // Converts from a space that goes from -5 to 5 to one that goes from 0 to canvas width/height.
-    const offset = 5
-    const scale = canvas.width / 10
-
-    const canvasVertices = polygon.vertices.map(vertex => {
-        const transformedVertex = vertex.addVector(polygon.position).addScalar(offset).multiply(scale)
-        transformedVertex.y = canvas.height - transformedVertex.y
-        return transformedVertex
-    })
+function drawPolygon(polygon: Polygon, supportVector: Vector2) {
+    const canvasVertices = polygon.vertices.map(vertex => worldToCanvas(vertex.addVector(polygon.position)))
 
     context.strokeStyle = "#000000"
     context.beginPath()
@@ -55,4 +95,21 @@ function drawPolygon(polygon: Polygon) {
 
     context.closePath()
     context.stroke()
+
+    const supportVertex = worldToCanvas(polygon.support(supportVector).addVector(polygon.position))
+
+    context.fillStyle = "#FF0000"
+    context.beginPath()
+    context.ellipse(supportVertex.x, supportVertex.y, 10, 10, 0, 0, 2 * Math.PI)
+    context.fill()
+}
+
+function worldToCanvas(vector: Vector2): Vector2 {
+    // Converts from a space that goes from -5 to 5 to one that goes from 0 to canvas width/height.
+    const offset = 5
+    const scale = canvas.width / 10
+    const canvasVector = vector.addScalar(offset).multiply(scale)
+    canvasVector.y = canvas.height - canvasVector.y
+    
+    return canvasVector
 }

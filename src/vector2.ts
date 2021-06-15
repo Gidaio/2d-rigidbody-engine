@@ -20,4 +20,8 @@ export default class Vector2 {
     public multiply(scalar: number): Vector2 {
         return new Vector2(this.x * scalar, this.y * scalar)
     }
+
+    public dot(vector: Vector2): number {
+        return this.x * vector.x + this.y * vector.y
+    }
 }
