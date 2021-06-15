@@ -1,7 +1,4 @@
-type Vector2 = {
-    x: number,
-    y: number,
-}
+import Vector2 from "./vector2.js"
 
 type Polygon = {
     vertices: Vector2[],
@@ -12,10 +9,10 @@ const canvas = document.getElementById("canvas") as HTMLCanvasElement
 const context = canvas.getContext("2d")!
 
 const polygons: Polygon[] = [
-    regularPolygon({ x: 0, y: 0 }, 6, 1),
-    regularPolygon({ x: 1, y: 1 }, 3, 0.5),
-    regularPolygon({ x: 2, y: -1 }, 9, 3),
-    regularPolygon({ x: -4, y: 0 }, 5, 1.25),
+    regularPolygon(new Vector2(0, 0), 6, 1),
+    regularPolygon(new Vector2(1, 1), 3, 0.5),
+    regularPolygon(new Vector2(2, -1), 9, 3),
+    regularPolygon(new Vector2(-4, 0), 5, 1.25),
 ]
 
 render()
@@ -31,26 +28,18 @@ function drawPolygon(polygon: Polygon) {
     const offset = 5
     const scale = canvas.width / 10
 
-    const canvasVertices = polygon.vertices.map(relativeVertex => {
-        const absoluteVertex: Vector2 = {
-            x: relativeVertex.x + polygon.position.x,
-            y: relativeVertex.y + polygon.position.y,
-        }
-
-        const canvasVertex: Vector2 = {
-            x: (absoluteVertex.x + offset) * scale,
-            y: canvas.height - (absoluteVertex.y + offset) * scale,
-        }
-
-        return canvasVertex
+    const canvasVertices = polygon.vertices.map(vertex => {
+        const transformedVertex = vertex.addVector(polygon.position).addScalar(offset).multiply(scale)
+        transformedVertex.y = canvas.height - transformedVertex.y
+        return transformedVertex
     })
 
     context.strokeStyle = "#000000"
     context.beginPath()
-    context.moveTo(canvasVertices[0].x, canvasVertices[0].y)
+    context.moveTo(...canvasVertices[0].coords)
 
     for (const vertex of canvasVertices.slice(1)) {
-        context.lineTo(vertex.x, vertex.y)
+        context.lineTo(...vertex.coords)
     }
 
     context.closePath()
@@ -60,7 +49,7 @@ function drawPolygon(polygon: Polygon) {
 function regularPolygon(position: Vector2, sides: number, radius: number): Polygon {
     const vertices = Array(sides).fill(0)
         .map((_, index) => 2 * Math.PI * index / sides)
-        .map<Vector2>(angle => ({ x: Math.cos(angle) * radius, y: Math.sin(angle) * radius }))
+        .map(angle => new Vector2(Math.cos(angle), Math.sin(angle)).multiply(radius))
 
     return {
         vertices,
