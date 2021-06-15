@@ -4,36 +4,6 @@ import Vector2 from "./vector2.js"
 const canvas = document.getElementById("canvas") as HTMLCanvasElement
 const context = canvas.getContext("2d")!
 let lastTime = performance.now()
-let supportAngle = 0
-
-const keys = {
-    left: false,
-    right: false,
-}
-
-document.addEventListener("keydown", event => {
-    switch (event.key) {
-        case "ArrowLeft":
-            keys.left = true
-            break
-
-        case "ArrowRight":
-            keys.right = true
-            break
-    }
-})
-
-document.addEventListener("keyup", event => {
-    switch (event.key) {
-        case "ArrowLeft":
-            keys.left = false
-            break
-
-        case "ArrowRight":
-            keys.right = false
-            break
-    }
-})
 
 const polygons: Polygon[] = [
     Polygon.regular(new Vector2(0, 0), 6, 1),
@@ -53,12 +23,14 @@ function doFrame(now: DOMHighResTimeStamp) {
     lastTime = now
 
     polygons.forEach(polygon => polygon.update(deltaTime))
-    if (keys.left) {
-        supportAngle += deltaTime * 2
-    }
 
-    if (keys.right) {
-        supportAngle -= deltaTime * 2
+    for (let a = 0; a < polygons.length - 1; a++) {
+        for (let b = a + 1; b < polygons.length; b++) {
+            if (polygons[a].collides(polygons[b])) {
+                polygons[a].color = "#FF0000"
+                polygons[b].color = "#00FF00"
+            }
+        }
     }
 
     render()
@@ -67,25 +39,15 @@ function doFrame(now: DOMHighResTimeStamp) {
 }
 
 function render() {
-    const supportVector = new Vector2(Math.cos(supportAngle), Math.sin(supportAngle))
-
     context.fillStyle = "#FFFFFF"
     context.fillRect(0, 0, canvas.width, canvas.height)
-    polygons.forEach(polygon => drawPolygon(polygon, supportVector))
-
-    const renderSupportVector = supportVector.multiply(50)
-
-    context.strokeStyle = "#FF0000"
-    context.beginPath()
-    context.moveTo(canvas.width / 2, canvas.height / 2)
-    context.lineTo(canvas.width / 2 + renderSupportVector.x, canvas.height / 2 - renderSupportVector.y)
-    context.stroke()
+    polygons.forEach(drawPolygon)
 }
 
-function drawPolygon(polygon: Polygon, supportVector: Vector2) {
+function drawPolygon(polygon: Polygon) {
     const canvasVertices = polygon.vertices.map(vertex => worldToCanvas(vertex.addVector(polygon.position)))
 
-    context.strokeStyle = "#000000"
+    context.strokeStyle = polygon.color
     context.beginPath()
     context.moveTo(...canvasVertices[0].coords)
 
@@ -95,13 +57,6 @@ function drawPolygon(polygon: Polygon, supportVector: Vector2) {
 
     context.closePath()
     context.stroke()
-
-    const supportVertex = worldToCanvas(polygon.support(supportVector).addVector(polygon.position))
-
-    context.fillStyle = "#FF0000"
-    context.beginPath()
-    context.ellipse(supportVertex.x, supportVertex.y, 10, 10, 0, 0, 2 * Math.PI)
-    context.fill()
 }
 
 function worldToCanvas(vector: Vector2): Vector2 {
