@@ -159,7 +159,7 @@ function render(collided: boolean, simplex: Vector2[]) {
 }
 
 function drawPolygon(polygon: Polygon) {
-    const canvasVertices = polygon.vertices.map(vertex => worldToCanvas(vertex.addVector(polygon.position)))
+    const canvasVertices = polygon.vertices.map(vertex => worldToCanvas(vertex.rotate(polygon.angle).addVector(polygon.position)))
 
     context.strokeStyle = polygon.selected ? "#FF0000" : "#000000"
     context.beginPath()

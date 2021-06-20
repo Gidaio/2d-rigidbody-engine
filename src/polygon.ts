@@ -3,6 +3,7 @@ import Vector2 from "./vector2.js"
 
 export default class Polygon {
     public selected = false
+    public angle = 0
 
     public static regular(position: Vector2, sides: number, radius: number): Polygon {
         const vertices = Array(sides).fill(0)
@@ -50,11 +51,27 @@ export default class Polygon {
         } else if (this.position.y < -5) {
             this.position.y += 10
         }
+
+        if (input["a"] === "down") {
+            this.angle += 4 * deltaTime
+        }
+        if (input["d"] === "down") {
+            this.angle -= 4 * deltaTime
+        }
+
+        if (this.angle < 0) {
+            this.angle += 2 * Math.PI
+        }
+        if (this.angle > 2 * Math.PI) {
+            this.angle -= 2 * Math.PI
+        }
     }
 
     public support(direction: Vector2): Vector2 {
+        const rotatedDirection = direction.rotate(-this.angle)
+
         const [_, closestVertex] = this.vertices.reduce<[number, Vector2]>((best, vertex) => {
-            const current = direction.dot(vertex)
+            const current = rotatedDirection.dot(vertex)
             if (current > best[0]) {
                 return [current, vertex]
             } else {
@@ -62,6 +79,6 @@ export default class Polygon {
             }
         }, [-Infinity, Vector2.zero()])
 
-        return closestVertex.addVector(this.position)
+        return closestVertex.rotate(this.angle).addVector(this.position)
     }
 }

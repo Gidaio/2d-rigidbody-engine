@@ -35,6 +35,13 @@ export default class Vector2 {
         return new Vector2(-this.x, -this.y)
     }
 
+    public rotate(angle: number): Vector2 {
+        return new Vector2(
+            this.x * Math.cos(angle) - this.y * Math.sin(angle),
+            this.x * Math.sin(angle) + this.y * Math.cos(angle),
+        )
+    }
+
     public angle(): number {
         let angle = Math.atan2(this.y, this.x)
         if (angle < 0) {
