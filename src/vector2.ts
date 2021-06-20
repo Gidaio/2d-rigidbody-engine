@@ -7,8 +7,8 @@ export default class Vector2 {
         return new Vector2(0, 0)
     }
 
-    public static fromDirection(dir: number): Vector2 {
-        return new Vector2(Math.cos(dir), Math.sin(dir))
+    public static fromAngle(angle: number): Vector2 {
+        return new Vector2(Math.cos(angle), Math.sin(angle))
     }
 
     public static tripleProduct(a: Vector2, b: Vector2, c: Vector2): Vector2 {
@@ -28,20 +28,20 @@ export default class Vector2 {
 
     public normalize(): Vector2 {
         const magnitude = this.magnitude()
-        return new Vector2(this.x / magnitude, this.y / magnitude)
+        return magnitude === 0 ? Vector2.zero() : new Vector2(this.x / magnitude, this.y / magnitude)
     }
 
     public negate(): Vector2 {
         return new Vector2(-this.x, -this.y)
     }
 
-    public direction(): number {
-        let dir = Math.atan2(this.y, this.x)
-        if (dir < 0) {
-            dir += 2 * Math.PI
+    public angle(): number {
+        let angle = Math.atan2(this.y, this.x)
+        if (angle < 0) {
+            angle += 2 * Math.PI
         }
 
-        return dir
+        return angle
     }
 
     public addScalar(scalar: number): Vector2 {
