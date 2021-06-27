@@ -39,14 +39,14 @@ function loop(now: DOMHighResTimeStamp) {
     polygonB.update(deltaTime, input)
 
     const [collided, simplex] = gjk()
-    let polytope
-    let normals
-    let penetrationVector
     if (collided) {
-        [polytope, normals, penetrationVector] = epa(polygonA, polygonB, simplex)
+        const penetrationVector = epa(polygonA, polygonB, simplex)
+        const halfPenetrationVector = penetrationVector.multiply(0.5)
+        polygonA.position = polygonA.position.subtractVector(halfPenetrationVector)
+        polygonB.position = polygonB.position.addVector(halfPenetrationVector)
     }
 
-    render(collided, simplex, polytope, normals, penetrationVector)
+    render()
 
     requestAnimationFrame(loop)
 }
@@ -101,7 +101,7 @@ function gjk(): [boolean, Vector2[]] {
 
     simplex.push(potentialSupportPoint)
 
-    while (true) {
+    for (let iterations = 0; iterations < 10; iterations++) {
         const ao = Vector2.zero().subtractVector(simplex[2])
         const ab = simplex[1].subtractVector(simplex[2])
         const ac = simplex[0].subtractVector(simplex[2])
@@ -109,7 +109,7 @@ function gjk(): [boolean, Vector2[]] {
         const acNormal = Vector2.tripleProduct(ab, ac, ac).normalize()
         const abDot = abNormal.dot(ao)
         const acDot = acNormal.dot(ao)
-        if (abDot < 0 && acDot < 0) {
+        if (abDot <= 0 && acDot <= 0) {
             return [true, simplex]
         } else if (abDot > 0) {
             potentialSupportPoint = polygonA.support(abNormal)
@@ -133,12 +133,15 @@ function gjk(): [boolean, Vector2[]] {
             throw new Error("I should never have gotten here.")
         }
     }
+
+    console.warn("Too many GJK iterations!")
+    return [false, []]
 }
 
-function epa(a: Polygon, b: Polygon, startingSimplex: Vector2[]): [Vector2[], Vector2[], Vector2] {
+function epa(a: Polygon, b: Polygon, startingSimplex: Vector2[]): Vector2 {
     const polytope = [...startingSimplex].sort((a, b) => a.angle() - b.angle())
 
-    while (true) {
+    for (let iterations = 0; iterations < 10; iterations++) {
         const normals = []
 
         let closestDirection: Vector2 = Vector2.zero()
@@ -164,43 +167,20 @@ function epa(a: Polygon, b: Polygon, startingSimplex: Vector2[]): [Vector2[], Ve
 
         const newVertex = a.support(closestDirection).subtractVector(b.support(closestDirection.negate()))
         if (polytope.some(vertex => vertex.equals(newVertex))) {
-            return [polytope, normals, closestDirection.multiply(closestDistance)]
+            return closestDirection.multiply(closestDistance)
         } else {
             polytope.splice(closestIndex + 1, 0, newVertex)
         }
     }
+
+    console.warn("Too many EPA iterations!")
+
+    return Vector2.zero()
 }
 
-function render(collided: boolean, simplex: Vector2[], polytope?: Vector2[], normals?: Vector2[], penetrationVector?: Vector2) {
+function render() {
     context.fillStyle = "#EEEEEE"
     context.fillRect(0, 0, canvas.width, canvas.height)
-
-    if (collided) {
-        drawShape(polytope!, "#FFFF00", true)
-
-        context.strokeStyle = "#FF00FF"
-        context.beginPath()
-        for (const normal of normals!) {
-            context.moveTo(canvas.width / 2, canvas.height / 2)
-            context.lineTo(...worldToCanvas(normal).coords)
-        }
-        context.stroke()
-    }
-
-    drawShape(simplex, collided ? "#00FF00" : "#0000FF", true)
-
-    context.fillStyle = "#000000"
-    context.beginPath()
-    context.moveTo(canvas.width / 2, canvas.height / 2)
-    context.ellipse(canvas.width / 2, canvas.height / 2, 3, 3, 0, 0, 2 * Math.PI)
-    context.fill()
-
-    context.font = "16px sans-serif"
-    context.fillStyle = "#000000"
-
-    if (penetrationVector) {
-        context.fillText(`Penetration vector: (${penetrationVector.x},${penetrationVector.y})`, 5, 21)
-    }
 
     drawPolygon(polygonA)
     drawPolygon(polygonB)
