@@ -51,6 +51,14 @@ export default class Vector2 {
         return angle
     }
 
+    public equals(b: Vector2): boolean {
+        if (Math.abs(this.x - b.x) < 0.001 && Math.abs(this.y - b.y) < 0.001) {
+            return true
+        } else {
+            return false
+        }
+    }
+
     public addScalar(scalar: number): Vector2 {
         return new Vector2(this.x + scalar, this.y + scalar)
     }

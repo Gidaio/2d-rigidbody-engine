@@ -38,9 +38,15 @@ function loop(now: DOMHighResTimeStamp) {
     polygonA.update(deltaTime, input)
     polygonB.update(deltaTime, input)
 
-    const [collided, simplex] = collision()
+    const [collided, simplex] = gjk()
+    let polytope
+    let normals
+    let penetrationVector
+    if (collided) {
+        [polytope, normals, penetrationVector] = epa(polygonA, polygonB, simplex)
+    }
 
-    render(collided, simplex)
+    render(collided, simplex, polytope, normals, penetrationVector)
 
     requestAnimationFrame(loop)
 }
@@ -64,7 +70,7 @@ function processInput() {
     })
 }
 
-function collision(): [boolean, Vector2[]] {
+function gjk(): [boolean, Vector2[]] {
     // This is GJK!
     let simplex: Vector2[] = []
     let supportDirection = polygonB.position.subtractVector(polygonA.position).normalize()
@@ -129,39 +135,86 @@ function collision(): [boolean, Vector2[]] {
     }
 }
 
-function render(collided: boolean, simplex: Vector2[]) {
+function epa(a: Polygon, b: Polygon, startingSimplex: Vector2[]): [Vector2[], Vector2[], Vector2] {
+    const polytope = [...startingSimplex].sort((a, b) => a.angle() - b.angle())
+
+    while (true) {
+        const normals = []
+
+        let closestDirection: Vector2 = Vector2.zero()
+        let closestIndex: number = -1
+        let closestDistance = Infinity
+        for (let i = 0; i < polytope.length; i++) {
+            const currentVertex = polytope[i]
+            const previousVertex = polytope[wrap(i - 1, 0, polytope.length)]
+            const nextVertex = polytope[wrap(i + 1, 0, polytope.length)]
+            const prevCurr = previousVertex.subtractVector(currentVertex)
+            const currNext = nextVertex.subtractVector(currentVertex)
+            const normal = Vector2.tripleProduct(prevCurr, currNext, currNext).normalize()
+
+            const distance = currentVertex.dot(normal)
+            if (distance < closestDistance) {
+                closestDistance = distance
+                closestIndex = i
+                closestDirection = normal
+            }
+
+            normals.push(normal.multiply(distance))
+        }
+
+        const newVertex = a.support(closestDirection).subtractVector(b.support(closestDirection.negate()))
+        if (polytope.some(vertex => vertex.equals(newVertex))) {
+            return [polytope, normals, closestDirection.multiply(closestDistance)]
+        } else {
+            polytope.splice(closestIndex + 1, 0, newVertex)
+        }
+    }
+}
+
+function render(collided: boolean, simplex: Vector2[], polytope?: Vector2[], normals?: Vector2[], penetrationVector?: Vector2) {
     context.fillStyle = "#EEEEEE"
     context.fillRect(0, 0, canvas.width, canvas.height)
-    drawPolygon(polygonA)
-    drawPolygon(polygonB)
 
-    const canvasSimplex = simplex.map(vertex => worldToCanvas(vertex))
-    context.strokeStyle = context.fillStyle = collided ? "#00FF00" : "#0000FF"
-    context.beginPath()
-    context.moveTo(...canvasSimplex[0].coords)
-    for (const vertex of canvasSimplex.slice(1)) {
-        context.lineTo(...vertex.coords)
+    if (collided) {
+        drawShape(polytope!, "#FFFF00", true)
+
+        context.strokeStyle = "#FF00FF"
+        context.beginPath()
+        for (const normal of normals!) {
+            context.moveTo(canvas.width / 2, canvas.height / 2)
+            context.lineTo(...worldToCanvas(normal).coords)
+        }
+        context.stroke()
     }
-    context.closePath()
-    context.stroke()
-    context.beginPath()
-    for (const vertex of canvasSimplex) {
-        context.moveTo(...vertex.coords)
-        context.ellipse(vertex.x, vertex.y, 3, 3, 0, 0, 2 * Math.PI)
-    }
-    context.fill()
+
+    drawShape(simplex, collided ? "#00FF00" : "#0000FF", true)
 
     context.fillStyle = "#000000"
     context.beginPath()
     context.moveTo(canvas.width / 2, canvas.height / 2)
     context.ellipse(canvas.width / 2, canvas.height / 2, 3, 3, 0, 0, 2 * Math.PI)
     context.fill()
+
+    context.font = "16px sans-serif"
+    context.fillStyle = "#000000"
+
+    if (penetrationVector) {
+        context.fillText(`Penetration vector: (${penetrationVector.x},${penetrationVector.y})`, 5, 21)
+    }
+
+    drawPolygon(polygonA)
+    drawPolygon(polygonB)
 }
 
 function drawPolygon(polygon: Polygon) {
-    const canvasVertices = polygon.vertices.map(vertex => worldToCanvas(vertex.rotate(polygon.angle).addVector(polygon.position)))
+    const worldVertices = polygon.vertices.map(vertex => vertex.rotate(polygon.angle).addVector(polygon.position))
+    drawShape(worldVertices, polygon.selected ? "#FF0000" : "#000000")
+}
 
-    context.strokeStyle = polygon.selected ? "#FF0000" : "#000000"
+function drawShape(shape: Vector2[], color: string, includeVertices = false) {
+    const canvasVertices = shape.map(vertex => worldToCanvas(vertex))
+
+    context.strokeStyle = context.fillStyle = color
     context.beginPath()
     context.moveTo(...canvasVertices[0].coords)
 
@@ -171,6 +224,15 @@ function drawPolygon(polygon: Polygon) {
 
     context.closePath()
     context.stroke()
+
+    if (includeVertices) {
+        context.beginPath()
+        for (const vertex of canvasVertices) {
+            context.moveTo(...vertex.coords)
+            context.ellipse(vertex.x, vertex.y, 3, 3, 0, 0, 2 * Math.PI)
+        }
+        context.fill()
+    }
 }
 
 function worldToCanvas(vector: Vector2): Vector2 {
@@ -179,6 +241,18 @@ function worldToCanvas(vector: Vector2): Vector2 {
     const scale = canvas.width / 10
     const canvasVector = vector.addScalar(offset).multiply(scale)
     canvasVector.y = canvas.height - canvasVector.y
-    
+
     return canvasVector
+}
+
+function wrap(value: number, min: number, max: number): number {
+    const interval = max - min
+
+    if (value < min) {
+        return value + interval
+    } else if (value >= max) {
+        return value - interval
+    } else {
+        return value
+    }
 }
