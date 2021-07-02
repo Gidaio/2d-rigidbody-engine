@@ -38,15 +38,17 @@ function loop(now: DOMHighResTimeStamp) {
     polygonA.update(deltaTime, input)
     polygonB.update(deltaTime, input)
 
-    const [collided, simplex] = gjk()
-    if (collided) {
-        const penetrationVector = epa(polygonA, polygonB, simplex)
+    const gjkSimplex = gjk()
+    let contactEdges
+    if (gjkSimplex) {
+        const penetrationVector = epa(polygonA, polygonB, gjkSimplex)
+        contactEdges = contactPoints(polygonA, polygonB, penetrationVector)
         const halfPenetrationVector = penetrationVector.multiply(0.5)
         polygonA.position = polygonA.position.subtractVector(halfPenetrationVector)
         polygonB.position = polygonB.position.addVector(halfPenetrationVector)
     }
 
-    render()
+    render(contactEdges)
 
     requestAnimationFrame(loop)
 }
@@ -70,7 +72,7 @@ function processInput() {
     })
 }
 
-function gjk(): [boolean, Vector2[]] {
+function gjk(): Vector2[] | null {
     // This is GJK!
     let simplex: Vector2[] = []
     let supportDirection = polygonB.position.subtractVector(polygonA.position).normalize()
@@ -84,7 +86,7 @@ function gjk(): [boolean, Vector2[]] {
     let potentialSupportPoint = aSupport.subtractVector(bSupport)
 
     if (potentialSupportPoint.dot(supportDirection) < 0) {
-        return [false, simplex]
+        return null
     }
 
     simplex.push(potentialSupportPoint)
@@ -96,7 +98,7 @@ function gjk(): [boolean, Vector2[]] {
         .subtractVector(polygonB.support(supportDirection.negate()))
 
     if (potentialSupportPoint.dot(supportDirection) < 0) {
-        return [false, simplex]
+        return null
     }
 
     simplex.push(potentialSupportPoint)
@@ -110,13 +112,13 @@ function gjk(): [boolean, Vector2[]] {
         const abDot = abNormal.dot(ao)
         const acDot = acNormal.dot(ao)
         if (abDot <= 0 && acDot <= 0) {
-            return [true, simplex]
+            return simplex
         } else if (abDot > 0) {
             potentialSupportPoint = polygonA.support(abNormal)
                 .subtractVector(polygonB.support(abNormal.negate()))
 
             if (potentialSupportPoint.dot(abNormal) < 0) {
-                return [false, simplex]
+                return null
             }
 
             simplex = [simplex[1], simplex[2], potentialSupportPoint]
@@ -125,7 +127,7 @@ function gjk(): [boolean, Vector2[]] {
                 .subtractVector(polygonB.support(acNormal.negate()))
 
             if (potentialSupportPoint.dot(acNormal) < 0) {
-                return [false, simplex]
+                return null
             }
 
             simplex = [simplex[0], simplex[2], potentialSupportPoint]
@@ -135,7 +137,7 @@ function gjk(): [boolean, Vector2[]] {
     }
 
     console.warn("Too many GJK iterations!")
-    return [false, []]
+    return null
 }
 
 function epa(a: Polygon, b: Polygon, startingSimplex: Vector2[]): Vector2 {
@@ -178,12 +180,73 @@ function epa(a: Polygon, b: Polygon, startingSimplex: Vector2[]): Vector2 {
     return Vector2.zero()
 }
 
-function render() {
+function contactPoints(a: Polygon, b: Polygon, penetrationVector: Vector2): [[Vector2, Vector2], [Vector2, Vector2]] | null {
+    const penetrationNormal = penetrationVector.normalize()
+    const contactEdgeA = getContactEdge(a, penetrationNormal)
+    const contactEdgeB = getContactEdge(b, penetrationNormal.negate())
+
+    if (!contactEdgeA || !contactEdgeB) {
+        return null
+    }
+
+    return [contactEdgeA, contactEdgeB]
+
+    function getContactEdge(polygon: Polygon, direction: Vector2): [Vector2, Vector2] | null {
+        let maxProjection = 0
+        let index = -1
+        for (let i = 0; i < polygon.vertices.length; i++) {
+            const vertex = polygon.vertices[i].rotate(polygon.angle)
+            const projection = direction.dot(vertex)
+            if (projection > maxProjection) {
+                maxProjection = projection
+                index = i
+            }
+        }
+
+        if (index === -1) {
+            return null
+        }
+
+        const previousIndex = wrap(index - 1, 0, polygon.vertices.length)
+        const nextIndex = wrap(index + 1, 0, polygon.vertices.length)
+        const rightEdge = polygon.vertices[index].rotate(polygon.angle)
+            .subtractVector(polygon.vertices[previousIndex].rotate(polygon.angle))
+            .normalize()
+        const leftEdge = polygon.vertices[index].rotate(polygon.angle)
+            .subtractVector(polygon.vertices[nextIndex]).rotate(polygon.angle)
+            .normalize()
+
+        if (rightEdge.dot(direction) <= leftEdge.dot(direction)) {
+            return [
+                polygon.vertices[previousIndex].rotate(polygon.angle).addVector(polygon.position),
+                polygon.vertices[index].rotate(polygon.angle).addVector(polygon.position),
+            ]
+        } else {
+            return [
+                polygon.vertices[index].rotate(polygon.angle).addVector(polygon.position),
+                polygon.vertices[nextIndex].rotate(polygon.angle).addVector(polygon.position),
+            ]
+        }
+    }
+}
+
+function render(contactEdges?: [[Vector2, Vector2], [Vector2, Vector2]] | null) {
     context.fillStyle = "#EEEEEE"
     context.fillRect(0, 0, canvas.width, canvas.height)
 
     drawPolygon(polygonA)
     drawPolygon(polygonB)
+
+    if (contactEdges) {
+        for (const edge of contactEdges) {
+            const canvasEdge = edge.map(vertex => worldToCanvas(vertex))
+            context.strokeStyle = "#00FF00"
+            context.beginPath()
+            context.moveTo(...canvasEdge[0].coords)
+            context.lineTo(...canvasEdge[1].coords)
+            context.stroke()
+        }
+    }
 }
 
 function drawPolygon(polygon: Polygon) {
