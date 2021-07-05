@@ -2,6 +2,11 @@ import Polygon from "./polygon.js"
 import Vector2 from "./vector2.js"
 
 export type Input = { [key: string]: "pressed" | "down" | "released" | "up" }
+export type Collision = {
+    referenceEdge: Edge,
+    incidentEdge: Edge,
+}
+export type Edge = { start: Vector2, end: Vector2, normal: Vector2}
 
 const canvas = document.getElementById("canvas") as HTMLCanvasElement
 const context = canvas.getContext("2d")!
@@ -39,16 +44,16 @@ function loop(now: DOMHighResTimeStamp) {
     polygonB.update(deltaTime, input)
 
     const gjkSimplex = gjk()
-    let contactEdges
+    let collisionInfo
     if (gjkSimplex) {
         const penetrationVector = epa(polygonA, polygonB, gjkSimplex)
-        contactEdges = contactPoints(polygonA, polygonB, penetrationVector)
+        collisionInfo = contactPoints(polygonA, polygonB, penetrationVector)
         const halfPenetrationVector = penetrationVector.multiply(0.5)
         polygonA.position = polygonA.position.subtractVector(halfPenetrationVector)
         polygonB.position = polygonB.position.addVector(halfPenetrationVector)
     }
 
-    render(contactEdges)
+    render(collisionInfo)
 
     requestAnimationFrame(loop)
 }
@@ -180,7 +185,7 @@ function epa(a: Polygon, b: Polygon, startingSimplex: Vector2[]): Vector2 {
     return Vector2.zero()
 }
 
-function contactPoints(a: Polygon, b: Polygon, penetrationVector: Vector2): [[Vector2, Vector2], [Vector2, Vector2]] | null {
+function contactPoints(a: Polygon, b: Polygon, penetrationVector: Vector2): Collision | null {
     const penetrationNormal = penetrationVector.normalize()
     const contactEdgeA = getContactEdge(a, penetrationNormal)
     const contactEdgeB = getContactEdge(b, penetrationNormal.negate())
@@ -189,9 +194,22 @@ function contactPoints(a: Polygon, b: Polygon, penetrationVector: Vector2): [[Ve
         return null
     }
 
-    return [contactEdgeA, contactEdgeB]
+    if (
+        Math.abs(contactEdgeA.end.subtractVector(contactEdgeA.start).dot(penetrationNormal))
+        <= Math.abs(contactEdgeB.end.subtractVector(contactEdgeB.start).dot(penetrationNormal))
+    ) {
+        return {
+            referenceEdge: contactEdgeA,
+            incidentEdge: contactEdgeB
+        }
+    } else {
+        return {
+            referenceEdge: contactEdgeB,
+            incidentEdge: contactEdgeA
+        }
+    }
 
-    function getContactEdge(polygon: Polygon, direction: Vector2): [Vector2, Vector2] | null {
+    function getContactEdge(polygon: Polygon, direction: Vector2): Edge | null {
         let maxProjection = 0
         let index = -1
         for (let i = 0; i < polygon.vertices.length; i++) {
@@ -207,45 +225,54 @@ function contactPoints(a: Polygon, b: Polygon, penetrationVector: Vector2): [[Ve
             return null
         }
 
+        const currentVertex = polygon.vertices[index].rotate(polygon.angle)
         const previousIndex = wrap(index - 1, 0, polygon.vertices.length)
+        const previousVertex = polygon.vertices[previousIndex].rotate(polygon.angle)
         const nextIndex = wrap(index + 1, 0, polygon.vertices.length)
-        const rightEdge = polygon.vertices[index].rotate(polygon.angle)
-            .subtractVector(polygon.vertices[previousIndex].rotate(polygon.angle))
-            .normalize()
-        const leftEdge = polygon.vertices[index].rotate(polygon.angle)
-            .subtractVector(polygon.vertices[nextIndex]).rotate(polygon.angle)
-            .normalize()
+        const nextVertex = polygon.vertices[nextIndex].rotate(polygon.angle)
+        const rightEdge = currentVertex.subtractVector(previousVertex).normalize()
+        const leftEdge = currentVertex.subtractVector(nextVertex).normalize()
 
         if (rightEdge.dot(direction) <= leftEdge.dot(direction)) {
-            return [
-                polygon.vertices[previousIndex].rotate(polygon.angle).addVector(polygon.position),
-                polygon.vertices[index].rotate(polygon.angle).addVector(polygon.position),
-            ]
+            return {
+                start: previousVertex.addVector(polygon.position),
+                end: currentVertex.addVector(polygon.position),
+                normal: Vector2.tripleProduct(rightEdge, leftEdge, rightEdge).normalize(),
+            }
         } else {
-            return [
-                polygon.vertices[index].rotate(polygon.angle).addVector(polygon.position),
-                polygon.vertices[nextIndex].rotate(polygon.angle).addVector(polygon.position),
-            ]
+            return {
+                start: currentVertex.addVector(polygon.position),
+                end: nextVertex.addVector(polygon.position),
+                normal: Vector2.tripleProduct(leftEdge, rightEdge, leftEdge).normalize(),
+            }
         }
     }
 }
 
-function render(contactEdges?: [[Vector2, Vector2], [Vector2, Vector2]] | null) {
+function render(collisionInfo?: Collision | null) {
     context.fillStyle = "#EEEEEE"
     context.fillRect(0, 0, canvas.width, canvas.height)
 
     drawPolygon(polygonA)
     drawPolygon(polygonB)
 
-    if (contactEdges) {
-        for (const edge of contactEdges) {
-            const canvasEdge = edge.map(vertex => worldToCanvas(vertex))
-            context.strokeStyle = "#00FF00"
-            context.beginPath()
-            context.moveTo(...canvasEdge[0].coords)
-            context.lineTo(...canvasEdge[1].coords)
-            context.stroke()
-        }
+    if (collisionInfo) {
+        context.lineWidth = 3
+        context.strokeStyle = "#00FF00"
+        const referenceCanvasStart = worldToCanvas(collisionInfo.referenceEdge.start)
+        const referenceCanvasEnd = worldToCanvas(collisionInfo.referenceEdge.end)
+        context.beginPath()
+        context.moveTo(...referenceCanvasStart.coords)
+        context.lineTo(...referenceCanvasEnd.coords)
+        context.stroke()
+
+        context.strokeStyle = "#FF0000"
+        const incidentCanvasStart = worldToCanvas(collisionInfo.incidentEdge.start)
+        const incidentCanvasEnd = worldToCanvas(collisionInfo.incidentEdge.end)
+        context.beginPath()
+        context.moveTo(...incidentCanvasStart.coords)
+        context.lineTo(...incidentCanvasEnd.coords)
+        context.stroke()
     }
 }
 
@@ -258,6 +285,7 @@ function drawShape(shape: Vector2[], color: string, includeVertices = false) {
     const canvasVertices = shape.map(vertex => worldToCanvas(vertex))
 
     context.strokeStyle = context.fillStyle = color
+    context.lineWidth = 1
     context.beginPath()
     context.moveTo(...canvasVertices[0].coords)
 
