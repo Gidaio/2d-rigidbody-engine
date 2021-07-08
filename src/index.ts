@@ -3,8 +3,10 @@ import Vector2 from "./vector2.js"
 
 export type Input = { [key: string]: "pressed" | "down" | "released" | "up" }
 export type Collision = {
-    referenceEdge: Edge,
-    incidentEdge: Edge,
+    referencePolygon: Polygon,
+    incidentPolygon: Polygon,
+    flipped: boolean,
+    contactPoint: Vector2,
 }
 export type Edge = { start: Vector2, end: Vector2, normal: Vector2}
 
@@ -51,6 +53,14 @@ function loop(now: DOMHighResTimeStamp) {
         const halfPenetrationVector = penetrationVector.multiply(0.5)
         polygonA.position = polygonA.position.subtractVector(halfPenetrationVector)
         polygonB.position = polygonB.position.addVector(halfPenetrationVector)
+
+        if (collisionInfo) {
+            if (collisionInfo.flipped) {
+                collisionInfo.contactPoint = collisionInfo.contactPoint.subtractVector(halfPenetrationVector)
+            } else {
+                collisionInfo.contactPoint = collisionInfo.contactPoint.addVector(halfPenetrationVector)
+            }
+        }
     }
 
     render(collisionInfo)
@@ -194,18 +204,45 @@ function contactPoints(a: Polygon, b: Polygon, penetrationVector: Vector2): Coll
         return null
     }
 
+    let referenceEdge
+    let referencePolygon
+    let incidentEdge
+    let incidentPolygon
+    let flipped
+
     if (
         Math.abs(contactEdgeA.end.subtractVector(contactEdgeA.start).dot(penetrationNormal))
         <= Math.abs(contactEdgeB.end.subtractVector(contactEdgeB.start).dot(penetrationNormal))
     ) {
+        referenceEdge = contactEdgeA
+        referencePolygon = a
+        incidentEdge = contactEdgeB
+        incidentPolygon = b
+        flipped = false
+    } else {
+        referenceEdge = contactEdgeB
+        referencePolygon = b
+        incidentEdge = contactEdgeA
+        incidentPolygon = a
+        flipped = true
+    }
+
+    const incidentStart = incidentEdge.start.normalize().dot(referenceEdge.normal)
+    const incidentEnd = incidentEdge.end.normalize().dot(referenceEdge.normal)
+
+    if (incidentStart <= incidentEnd) {
         return {
-            referenceEdge: contactEdgeA,
-            incidentEdge: contactEdgeB
+            referencePolygon,
+            incidentPolygon,
+            contactPoint: incidentEdge.start.addVector(incidentPolygon.position),
+            flipped,
         }
     } else {
         return {
-            referenceEdge: contactEdgeB,
-            incidentEdge: contactEdgeA
+            referencePolygon,
+            incidentPolygon,
+            contactPoint: incidentEdge.end.addVector(incidentPolygon.position),
+            flipped,
         }
     }
 
@@ -235,14 +272,14 @@ function contactPoints(a: Polygon, b: Polygon, penetrationVector: Vector2): Coll
 
         if (rightEdge.dot(direction) <= leftEdge.dot(direction)) {
             return {
-                start: previousVertex.addVector(polygon.position),
-                end: currentVertex.addVector(polygon.position),
+                start: previousVertex,
+                end: currentVertex,
                 normal: Vector2.tripleProduct(rightEdge, leftEdge, rightEdge).normalize(),
             }
         } else {
             return {
-                start: currentVertex.addVector(polygon.position),
-                end: nextVertex.addVector(polygon.position),
+                start: currentVertex,
+                end: nextVertex,
                 normal: Vector2.tripleProduct(leftEdge, rightEdge, leftEdge).normalize(),
             }
         }
@@ -257,22 +294,11 @@ function render(collisionInfo?: Collision | null) {
     drawPolygon(polygonB)
 
     if (collisionInfo) {
-        context.lineWidth = 3
-        context.strokeStyle = "#00FF00"
-        const referenceCanvasStart = worldToCanvas(collisionInfo.referenceEdge.start)
-        const referenceCanvasEnd = worldToCanvas(collisionInfo.referenceEdge.end)
+        context.fillStyle = "#0000FF"
+        const canvasContactPoint = worldToCanvas(collisionInfo.contactPoint)
         context.beginPath()
-        context.moveTo(...referenceCanvasStart.coords)
-        context.lineTo(...referenceCanvasEnd.coords)
-        context.stroke()
-
-        context.strokeStyle = "#FF0000"
-        const incidentCanvasStart = worldToCanvas(collisionInfo.incidentEdge.start)
-        const incidentCanvasEnd = worldToCanvas(collisionInfo.incidentEdge.end)
-        context.beginPath()
-        context.moveTo(...incidentCanvasStart.coords)
-        context.lineTo(...incidentCanvasEnd.coords)
-        context.stroke()
+        context.ellipse(canvasContactPoint.x, canvasContactPoint.y, 3, 3, 0, 0, Math.PI * 2)
+        context.fill()
     }
 }
 
